@@ -3,7 +3,6 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 
-const APPEAL_SERVER_INVITE = 'https://discord.gg/256k5quuQy';
 const WARN_COLOR = 0xFFD700;
 const SUCCESS_COLOR = 0x2ECC71;
 const AUTOMOD_COLOR = 0xAA0000;
@@ -62,8 +61,6 @@ module.exports = {
             const sent = await modLogChannel.send({ embeds: [warnLogEmbed] }).catch(console.error);
             if(sent) await db.query('UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2', [sent.id, caseId]);
         }
-
-        let finalReplyEmbeds = [];
         
         const ruleResult = await db.query('SELECT * FROM automod_rules WHERE guildid = $1 AND warnings_count = $2', [guildId, activeWarningsCount]);
         const ruleToExecute = ruleResult.rows[0];
@@ -72,7 +69,7 @@ module.exports = {
             const action = ruleToExecute.action_type;
             const durationStr = ruleToExecute.action_duration;
             const autoCaseId = `AUTO-${Date.now()}`;
-            const autoReason = `Automod: Triggered by reaching ${activeWarningsCount} warnings.`;
+            const autoReason = `Automod: Triggered by reaching ${activeWarningsCount} warnings. Overwriting previous punishments if any.`;
             let endsAt = null;
 
             try {
@@ -91,6 +88,26 @@ module.exports = {
             }
 
             try {
+                // --- MODIFICADO: LIMPIAR SANCIONES ANTERIORES Y SUS TIMERS ---
+                const activePunishmentsResult = await db.query(
+                    `SELECT caseid FROM modlogs WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND (action = 'TIMEOUT' OR action = 'BAN')`,
+                    [guildId, targetUser.id]
+                );
+                
+                for (const row of activePunishmentsResult.rows) {
+                    if (interaction.client.punishmentTimers.has(row.caseid)) {
+                        clearTimeout(interaction.client.punishmentTimers.get(row.caseid));
+                        interaction.client.punishmentTimers.delete(row.caseid);
+                        console.log(`[AUTOMOD-OVERWRITE] Cleared timer for Case ID ${row.caseid} to apply new punishment.`);
+                    }
+                }
+                
+                await db.query(
+                    `UPDATE modlogs SET status = 'EXPIRED', "endsat" = NULL WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND (action = 'TIMEOUT' OR action = 'BAN')`,
+                    [guildId, targetUser.id]
+                );
+                // --- FIN DE LA MODIFICACIÓN ---
+
                 if ((action === 'MUTE' || action === 'BAN') && durationStr) {
                     const durationMs = ms(durationStr);
                     if (durationMs) endsAt = Date.now() + durationMs;
@@ -113,35 +130,47 @@ module.exports = {
                     if(sentAuto) await db.query('UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2', [sentAuto.id, autoCaseId]);
                 }
 
-                finalReplyEmbeds.push(
-                    new EmbedBuilder()
-                        .setColor(AUTOMOD_COLOR)
-                        .setTitle('⚠️ WARNING & AUTOMOD TRIGGERED')
-                        .setDescription(`**${targetUser.tag}** has been warned, reaching **${activeWarningsCount}** warnings and triggering an automatic **${action}**!`)
-                        .addFields(
-                            { name: '👮 Moderator (Manual Warn)', value: `<@${interaction.user.id}>` },
-                            { name: '🧾 Warn Case ID', value: `\`${caseId}\`` },
-                            { name: '🤖 Auto-Punishment', value: `${action} (${durationStr || 'Permanent'})` },
-                            { name: '🧾 Automod Case ID', value: `\`${autoCaseId}\`` }
-                        )
-                        .setTimestamp()
-                );
             } catch (autoError) {
                 console.error('[ERROR] AUTOMOD FAILED:', autoError);
-                finalReplyEmbeds.push(new EmbedBuilder().setColor(SUCCESS_COLOR).setTitle('✅ Warning Issued (Automod Failed)').setDescription(`**${targetUser.tag}** has been warned, but the automated punishment of **${action}** failed. Please check my permissions.`));
             }
         }
 
-        if (finalReplyEmbeds.length === 0) {
-            finalReplyEmbeds.push(
-                new EmbedBuilder()
-                    .setColor(SUCCESS_COLOR)
-                    .setTitle('✅ Warning Successfully Issued')
-                    .setDescription(`**${targetUser.tag}** has been warned. They now have **${activeWarningsCount}** active warning(s).`)
-                    .setFooter({ text: `Case ID: ${caseId}` })
-            );
+        // --- MODIFICADO: BLOQUE DE RESPUESTA FINAL ---
+        let finalReplyEmbed;
+
+        if (ruleToExecute && targetMember) {
+            const action = ruleToExecute.action_type;
+            const durationStr = ruleToExecute.action_duration;
+
+            finalReplyEmbed = new EmbedBuilder()
+                .setColor(AUTOMOD_COLOR)
+                .setTitle('⚠️ Warn Issued & Automod Triggered!')
+                .setDescription(`**${targetUser.tag}** was warned, reaching **${activeWarningsCount}** warnings.`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
+                .addFields(
+                    { name: '👮 Moderator (Warn)', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: '🧾 Warn Case ID', value: `\`${caseId}\``, inline: true },
+                    { name: '🤖 Punishment', value: `**${action}**`, inline: true },
+                    { name: '⏳ Duration', value: durationStr || (action === 'BAN' ? 'Permanent' : 'N/A'), inline: true },
+                    { name: '🧾 Automod Case ID', value: `\`${`AUTO-${currentTimestamp}`}\``, inline: true }
+                )
+                .setTimestamp();
+        } 
+        else {
+            finalReplyEmbed = new EmbedBuilder()
+                .setColor(SUCCESS_COLOR)
+                .setTitle('✅ Warning Successfully Issued')
+                .setDescription(`**${targetUser.tag}** has been warned. They now have **${activeWarningsCount}** active warning(s).`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 64 }))
+                .addFields(
+                    { name: '👮 Moderator', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: '🧾 Case ID', value: `\`${caseId}\``, inline: true }
+                )
+                .setFooter({ text: `Reason: ${cleanReason.substring(0, 100)}${cleanReason.length > 100 ? '...' : ''}` })
+                .setTimestamp();
         }
         
-        await interaction.editReply({ embeds: finalReplyEmbeds });
+        await interaction.editReply({ embeds: [finalReplyEmbed] });
+        // --- FIN DE LA MODIFICACIÓN ---
     },
 };

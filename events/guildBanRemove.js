@@ -7,11 +7,21 @@ module.exports = {
         const userId = ban.user.id;
         const guildId = ban.guild.id;
 
-        // POSTGRESQL: Actualizar el log de BAN activo a EXPIRED (y limpiar endsAt)
         try {
+            // --- AÑADIDO: LIMPIEZA DE TIMERS EN EL EVENTO ---
+            const activeBansResult = await db.query(`SELECT caseid FROM modlogs WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'BAN'`, [guildId, userId]);
+            for (const row of activeBansResult.rows) {
+                if (ban.client.punishmentTimers && ban.client.punishmentTimers.has(row.caseid)) {
+                    clearTimeout(ban.client.punishmentTimers.get(row.caseid));
+                    ban.client.punishmentTimers.delete(row.caseid);
+                    console.log(`[TIMER] Cleared active timer for Case ID ${row.caseid} due to manual unban event.`);
+                }
+            }
+            // --- FIN DE LA MODIFICACIÓN ---
+
             const result = await db.query(
                 `UPDATE modlogs 
-                 SET status = $1, endsAt = NULL
+                 SET status = $1, "endsat" = NULL
                  WHERE userid = $2 
                    AND guildid = $3 
                    AND action = $4 

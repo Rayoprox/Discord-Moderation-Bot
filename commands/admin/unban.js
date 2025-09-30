@@ -50,6 +50,17 @@ module.exports = {
             return interaction.editReply({ content: '❌ An error occurred while trying to unban this user. Please check my permissions.', flags: [MessageFlags.Ephemeral] });
         }
 
+        // --- AÑADIDO: LIMPIEZA DE TIMERS ---
+        const activeBansResult = await db.query(`SELECT caseid FROM modlogs WHERE guildid = $1 AND userid = $2 AND status = 'ACTIVE' AND action = 'BAN'`, [guildId, targetId]);
+        for (const row of activeBansResult.rows) {
+            if (interaction.client.punishmentTimers.has(row.caseid)) {
+                clearTimeout(interaction.client.punishmentTimers.get(row.caseid));
+                interaction.client.punishmentTimers.delete(row.caseid);
+                console.log(`[TIMER] Cleared active timer for Case ID ${row.caseid} due to /unban command.`);
+            }
+        }
+        // --- FIN DE LA MODIFICACIÓN ---
+
         await db.query(`
             UPDATE modlogs SET status = $1, endsAt = NULL 
             WHERE guildid = $2 AND userid = $3 AND status = $4 AND action = $5

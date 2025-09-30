@@ -25,9 +25,6 @@ module.exports = {
         .addBooleanOption(option => option.setName('blacklist').setDescription('Immediately blacklist the user from appealing this ban (default: No).')),
 
     async execute(interaction) {
-        // NOTA IMPORTANTE: La interacción ya fue aplazada (deferred) en interactionCreate.js
-        // Usamos interaction.editReply() para todo: errores tempranos y respuesta final.
-
         const targetUser = interaction.options.getUser('user');
         const reason = interaction.options.getString('reason') || 'No reason specified';
         const timeStr = interaction.options.getString('duration');
@@ -38,7 +35,6 @@ module.exports = {
         const guildId = interaction.guild.id;
         const moderatorTag = interaction.user.tag;
         
-        // Saneamiento
         const cleanModeratorTag = moderatorTag.trim();
         const cleanReason = reason.trim();
         const currentTimestamp = Date.now();
@@ -47,6 +43,13 @@ module.exports = {
         if (targetUser.id === interaction.user.id) return interaction.editReply({ content: '❌ You cannot ban yourself.', flags: [MessageFlags.Ephemeral] });
         if (targetUser.id === interaction.client.user.id) return interaction.editReply({ content: '❌ You cannot ban me.', flags: [MessageFlags.Ephemeral] });
         if (targetUser.id === interaction.guild.ownerId) return interaction.editReply({ content: '❌ You cannot ban the server owner.', flags: [MessageFlags.Ephemeral] });
+
+        // --- AÑADIDO: VERIFICACIÓN DE BAN EXISTENTE ---
+        const isBanned = await interaction.guild.bans.fetch(targetUser.id).catch(() => null);
+        if (isBanned) {
+            return interaction.editReply({ content: '❌ This user is already banned.', flags: [MessageFlags.Ephemeral] });
+        }
+        // --- FIN DE LA MODIFICACIÓN ---
 
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
@@ -60,7 +63,6 @@ module.exports = {
             if (!targetMember.bannable) return interaction.editReply({ content: '❌ I do not have permission to ban this user (their role is likely higher than mine).', flags: [MessageFlags.Ephemeral] });
         }
         
-        // --- CÁLCULO DE DURACIÓN ---
         let endsAt = null;
         let durationStrDisplay = 'Permanent';
         let dbDurationStr = null; 
@@ -76,7 +78,6 @@ module.exports = {
 
         const caseId = `CASE-${currentTimestamp}`;
         
-        // --- DM Notification ---
         let dmSent = false; 
         const dmEmbed = new EmbedBuilder()
             .setColor(BAN_COLOR)
@@ -113,11 +114,9 @@ module.exports = {
             }
         } catch (error) {
             dmSent = false; 
-            // Logging del error de DM para que se muestre en Render
             console.warn(`[WARN] Could not send DM to ${targetUser.tag}. Error: ${error.message.substring(0, 50)}...`);
         }
 
-        // Execute Ban (Aquí está la clave: usamos [CMD] en la razón)
         try {
             const banReason = `[CMD] ${cleanReason} (Moderator: ${cleanModeratorTag}, Case ID: ${caseId})`;
             await interaction.guild.bans.create(targetUser.id, { reason: banReason, deleteMessageSeconds });
@@ -126,7 +125,6 @@ module.exports = {
             return interaction.editReply({ content: '❌ An unexpected error occurred while trying to ban the user.', flags: [MessageFlags.Ephemeral] });
         }
 
-        // --- REGISTRO EN BBDD (Solo aquí) ---
         await db.query(`
             INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, endsAt, action_duration, appealable, dmstatus, status) 
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -136,7 +134,6 @@ module.exports = {
             endsAt, dbDurationStr, isAppealable ? 1 : 0, dmSent ? 'SENT' : 'FAILED', endsAt ? 'ACTIVE' : 'PERMANENT'
         ]);
 
-        // --- LLAMAR AL HANDLER DE PERSISTENCIA ---
         if (endsAt) {
             resumePunishmentsOnStart(interaction.client); 
         }
@@ -145,7 +142,6 @@ module.exports = {
             await db.query("INSERT INTO appeal_blacklist (userid, guildid) VALUES ($1, $2) ON CONFLICT DO NOTHING", [targetUser.id, guildId]);
         }
 
-        // --- LOG AL CANAL DE MODERACIÓN ---
         const modLogResult = await db.query('SELECT channel_id FROM log_channels WHERE guildid = $1 AND log_type = $2', [guildId, 'modlog']);
         const modLogChannelId = modLogResult.rows[0]?.channel_id;
         
@@ -174,7 +170,6 @@ module.exports = {
             }
         }
         
-        // --- RESPUESTA PÚBLICA FINAL (Confirmación) ---
         const publicEmbed = new EmbedBuilder()
             .setColor(SUCCESS_COLOR) 
             .setTitle('🔨 Ban Successfully Executed')
