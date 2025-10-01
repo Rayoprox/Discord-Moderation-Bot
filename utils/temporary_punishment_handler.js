@@ -1,6 +1,7 @@
 const ms = require('ms');
 const { EmbedBuilder, Collection } = require('discord.js');
 
+// Inicializamos el mapa de timers si no existe
 function initializeTimerMap(client) {
     if (!client.punishmentTimers) {
         client.punishmentTimers = new Collection();
@@ -52,7 +53,6 @@ const processExpiredPunishment = async (client, log) => {
         if (modLogChannelId) {
             const channel = guild.channels.cache.get(modLogChannelId);
             if (channel) {
-                // --- ESTÉTICA MEJORADA: LOG DE EXPIRACIÓN AUTOMÁTICA ---
                  const user = await client.users.fetch(userId).catch(() => ({ tag: log.usertag, displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' }));
                  const modLogEmbed = new EmbedBuilder()
                     .setColor(0x2ECC71)
@@ -74,6 +74,35 @@ const processExpiredPunishment = async (client, log) => {
     }
 };
 
+const checkAndResumePunishments = async (client) => {
+    initializeTimerMap(client);
+    const db = client.db;
+    const now = Date.now();
+    
+    // Limpiamos timers antiguos para asegurar un estado limpio al reiniciar.
+    client.punishmentTimers.forEach(timer => clearTimeout(timer));
+    client.punishmentTimers.clear();
+
+    const activeResult = await db.query(`SELECT * FROM modlogs WHERE status = 'ACTIVE' AND "endsat" IS NOT NULL AND "endsat" > $1`, [now]);
+
+    for (const log of activeResult.rows) {
+        const endsAtTimestamp = Number(log.endsat);
+        const remainingTime = endsAtTimestamp - now;
+        
+        if (remainingTime <= 0) {
+            processExpiredPunishment(client, log);
+            continue;
+        }
+        
+        const timer = setTimeout(() => {
+            processExpiredPunishment(client, log);
+            client.punishmentTimers.delete(log.caseid); // Limpiar el timer cuando se completa
+        }, remainingTime);
+
+        // Guardamos el timer en el mapa para poder cancelarlo si es necesario
+        client.punishmentTimers.set(log.caseid, timer);
+    }
+};
 
 const resumePunishmentsOnStart = async (client) => {
     // Primero, procesamos los castigos que ya expiraron mientras el bot estaba offline.
