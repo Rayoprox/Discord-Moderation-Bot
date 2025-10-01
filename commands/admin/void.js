@@ -5,10 +5,10 @@ const VOID_COLOR = 0x546E7A;
 
 module.exports = {
     deploy: 'main',
-    isPublic: true, // Respuesta pública
+    isPublic: true,
     data: new SlashCommandBuilder()
         .setName('void')
-        .setDescription("Annuls (marks as void) an active or recorded moderation case.")
+        .setDescription("Annuls (marks as void) a finished moderation case.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
         .addStringOption(option => option.setName('case_id').setDescription('The Case ID of the log to void (e.g., CASE-123456789).').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for voiding this case.').setRequired(true)),
@@ -25,9 +25,16 @@ module.exports = {
             return interaction.editReply({ content: `❌ Case ID \`${caseId}\` not found in the logs.`, flags: [MessageFlags.Ephemeral] });
         }
         
-        if (log.status === 'VOIDED' || log.status === 'REMOVED' || log.status === 'EXPIRED') {
-            return interaction.editReply({ content: `❌ Case ID \`${caseId}\` is already marked as **${log.status}** and cannot be voided.`, flags: [MessageFlags.Ephemeral] });
+        // --- LÓGICA DE ESTADO CORREGIDA ---
+        if (log.status === 'ACTIVE') {
+            return interaction.editReply({ content: `❌ This case is still **ACTIVE**. Please remove the punishment (unban/unmute) before you can void this case.`, flags: [MessageFlags.Ephemeral] });
         }
+
+        if (log.status === 'VOIDED' || log.status === 'REMOVED') {
+            return interaction.editReply({ content: `❌ Case ID \`${caseId}\` is already marked as **${log.status}** and cannot be voided again.`, flags: [MessageFlags.Ephemeral] });
+        }
+        // Si el estado es 'EXPIRED' o 'PERMANENT', el código ahora continuará.
+        // --- FIN DE LA CORRECCIÓN ---
 
         const newReason = `[VOIDED by ${interaction.user.tag}: ${voidReason}] - Original Reason: ${log.reason}`;
         
@@ -63,8 +70,21 @@ module.exports = {
             }
         }
         
-        const confirmationEmbed = new EmbedBuilder().setColor(VOID_COLOR).setTitle('✅ Case Annulled (VOIDED)').setDescription(`The moderation log for **Case ID \`${caseId}\`** has been successfully annulled.`).setThumbnail(log.usertag ? interaction.client.users.cache.get(log.userid)?.displayAvatarURL({ dynamic: true, size: 64 }) : null).addFields({ name: '👤 User', value: `<@${log.userid}> (\`${log.usertag}\`)`, inline: true },{ name: '🔨 Original Action', value: log.action, inline: true },{ name: '👮 Moderator', value: interaction.user.tag, inline: true },{ name: '📝 Void Reason', value: voidReason, inline: false }).setFooter({ text: `This case will appear as struck-through in /modlogs and /warnings.` }).setTimestamp();
+        const user = await interaction.client.users.fetch(log.userid).catch(() => null);
+        const confirmationEmbed = new EmbedBuilder()
+            .setColor(VOID_COLOR)
+            .setTitle('✅ Case Annulled (VOIDED)')
+            .setDescription(`The moderation log for **Case ID \`${caseId}\`** has been successfully annulled.`)
+            .setThumbnail(user ? user.displayAvatarURL({ dynamic: true, size: 64 }) : null)
+            .addFields(
+                { name: '👤 User', value: `<@${log.userid}> (${log.usertag || 'Unknown Tag'})`, inline: true },
+                { name: '🔨 Original Action', value: log.action, inline: true },
+                { name: '👮 Moderator', value: interaction.user.tag, inline: true },
+                { name: '📝 Void Reason', value: voidReason, inline: false }
+            )
+            .setFooter({ text: `This case will now appear as voided.` })
+            .setTimestamp();
         
         await interaction.editReply({ embeds: [confirmationEmbed] });
     },
-};  
+};
