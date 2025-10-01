@@ -58,7 +58,6 @@ module.exports = {
         const modLogChannelId = modLogResult.rows[0]?.channel_id;
         const modLogChannel = modLogChannelId ? interaction.guild.channels.cache.get(modLogChannelId) : null;
 
-        // --- ESTÉTICA MEJORADA: LOG DEL WARN ---
         if (modLogChannel) {
             const warnLogEmbed = new EmbedBuilder()
                 .setColor(WARN_COLOR)
@@ -82,7 +81,6 @@ module.exports = {
         const ruleResult = await db.query('SELECT * FROM automod_rules WHERE guildid = $1 AND warnings_count = $2', [guildId, activeWarningsCount]);
         const ruleToExecute = ruleResult.rows[0];
 
-       
         if (ruleToExecute && targetMember) {
             const action = ruleToExecute.action_type;
             const durationStr = ruleToExecute.action_duration;
@@ -97,13 +95,13 @@ module.exports = {
                 autoDmSent = true;
             } catch (e) { console.warn(`[AUTOMOD] Could not send punishment DM to ${targetUser.tag}.`); }
 
-           
             try {
-                if ((action === 'MUTE' || action === 'BAN') && durationStr) {
+                if ((action === 'MUTE' || action === 'TIMEOUT' || action === 'BAN') && durationStr) {
                     const durationMs = ms(durationStr);
                     if (durationMs) endsAt = Date.now() + durationMs;
                 }
-const dbAction = action === 'MUTE' ? 'TIMEOUT' : action; // Estandarizamos 'MUTE' a 'TIMEOUT'
+
+                const dbAction = (action === 'MUTE' || action === 'TIMEOUT') ? 'TIMEOUT' : action;
                 
                 await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, "endsat", action_duration, status, dmstatus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [autoCaseId, guildId, dbAction, targetUser.id, targetUser.tag, interaction.client.user.id, interaction.client.user.tag, autoReason, Date.now(), endsAt, durationStr, 'ACTIVE', autoDmSent ? 'SENT' : 'FAILED']);
                 
@@ -111,12 +109,11 @@ const dbAction = action === 'MUTE' ? 'TIMEOUT' : action; // Estandarizamos 'MUTE
                 
                 if (action === 'KICK') await targetMember.kick(autoReason);
                 else if (action === 'BAN') await interaction.guild.bans.create(targetUser.id, { reason: autoReason });
-                else if (action === 'MUTE') {
+                else if (action === 'MUTE' || action === 'TIMEOUT') {
                     const durationMs = ms(durationStr);
                     if (durationMs) await targetMember.timeout(durationMs, autoReason);
                 }
 
-                // --- ESTÉTICA MEJORADA: LOG DEL AUTOMOD ---
                 if (modLogChannel) {
                     const punishmentLogEmbed = new EmbedBuilder()
                         .setColor(AUTOMOD_COLOR)
@@ -135,7 +132,6 @@ const dbAction = action === 'MUTE' ? 'TIMEOUT' : action; // Estandarizamos 'MUTE
                     if(sentAuto) await db.query('UPDATE modlogs SET logmessageid = $1 WHERE caseid = $2', [sentAuto.id, autoCaseId]);
                 }
 
-                // --- ESTÉTICA MEJORADA: RESPUESTA PÚBLICA DEL AUTOMOD ---
                 finalReplyEmbed = new EmbedBuilder()
                     .setColor(AUTOMOD_COLOR)
                     .setTitle(`⚠️ Automod Triggered: ${action}`)
@@ -156,7 +152,6 @@ const dbAction = action === 'MUTE' ? 'TIMEOUT' : action; // Estandarizamos 'MUTE
             }
         }
 
-        // --- ESTÉTICA MEJORADA: RESPUESTA PÚBLICA DEL WARN ---
         if (!finalReplyEmbed) {
             finalReplyEmbed = new EmbedBuilder()
                 .setColor(SUCCESS_COLOR)
