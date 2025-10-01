@@ -358,23 +358,20 @@ module.exports = {
                 return interaction.editReply({ content: 'Please select an active warning to **annul** (mark as removed):', components: [new ActionRowBuilder().addComponents(menu)] });
             }
 
-             if (customId.startsWith('warns_remove-select_')) {
+          if (customId.startsWith('warns_remove-select_')) {
                 await interaction.deferUpdate();
                 const caseIdToRemove = values[0];
                 let editSuccess = false;
 
                 try {
-                    // 1. Obtenemos el log completo para tener el logmessageid
-                    const logResult = await db.query('SELECT * FROM modlogs WHERE caseid = $1 AND guildid = $2', [caseIdToRemove, guildId]);
+                    const logResult = await db.query('SELECT * FROM modlogs WHERE caseid = $1 AND guildid = $2', [caseIdToRemove, interaction.guild.id]);
                     const log = logResult.rows[0];
 
-                    // 2. Actualizamos la base de datos para marcarlo como REMOVED
-                    await db.query("UPDATE modlogs SET status = 'REMOVED' WHERE caseid = $1 AND guildid = $2", [caseIdToRemove, guildId]);
+                    await db.query("UPDATE modlogs SET status = 'REMOVED' WHERE caseid = $1 AND guildid = $2", [caseIdToRemove, interaction.guild.id]);
 
-                    // 3. Si hay un mensaje de log asociado, lo editamos
                     if (log && log.logmessageid) {
                         try {
-                            const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE log_type='modlog' AND guildid = $1", [guildId]);
+                            const modLogResult = await db.query("SELECT channel_id FROM log_channels WHERE log_type='modlog' AND guildid = $1", [interaction.guild.id]);
                             const modLogChannelId = modLogResult.rows[0]?.channel_id;
                             
                             if (modLogChannelId) {
@@ -383,10 +380,15 @@ module.exports = {
 
                                 if (message && message.embeds.length > 0) {
                                     const originalEmbed = message.embeds[0];
+                                    const originalDescription = originalEmbed.description || '';
+                                    
+                                    // --- LÓGICA MODIFICADA ---
                                     const newEmbed = EmbedBuilder.from(originalEmbed)
-                                        .setColor(0x95A5A6) // Color gris
+                                        .setDescription(`~~${originalDescription}~~`) // <-- LÍNEA MODIFICADA PARA TACHAR
+                                        .setColor(0x95A5A6)
                                         .setTitle(`⚠️ Case Annulled: ${log.action.toUpperCase()}`)
                                         .setFooter({ text: `Case ID: ${caseIdToRemove} | Status: REMOVED` });
+                                    // --- FIN DE LA MODIFICACIÓN ---
                                     
                                     await message.edit({ embeds: [newEmbed] });
                                     editSuccess = true;
@@ -397,7 +399,6 @@ module.exports = {
                         }
                     }
 
-                    // 4. Enviamos la confirmación al moderador
                     await interaction.editReply({ 
                         content: `✅ Warning \`${caseIdToRemove}\` has been successfully **annulled**. ${editSuccess ? 'The original log embed has been updated.' : ''}`, 
                         components: [] 
