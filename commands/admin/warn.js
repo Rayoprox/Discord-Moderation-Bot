@@ -82,6 +82,7 @@ module.exports = {
         const ruleResult = await db.query('SELECT * FROM automod_rules WHERE guildid = $1 AND warnings_count = $2', [guildId, activeWarningsCount]);
         const ruleToExecute = ruleResult.rows[0];
 
+       
         if (ruleToExecute && targetMember) {
             const action = ruleToExecute.action_type;
             const durationStr = ruleToExecute.action_duration;
@@ -96,13 +97,15 @@ module.exports = {
                 autoDmSent = true;
             } catch (e) { console.warn(`[AUTOMOD] Could not send punishment DM to ${targetUser.tag}.`); }
 
+           
             try {
                 if ((action === 'MUTE' || action === 'BAN') && durationStr) {
                     const durationMs = ms(durationStr);
                     if (durationMs) endsAt = Date.now() + durationMs;
                 }
-
-                await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, "endsat", action_duration, status, dmstatus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [autoCaseId, guildId, action, targetUser.id, targetUser.tag, interaction.client.user.id, interaction.client.user.tag, autoReason, Date.now(), endsAt, durationStr, 'ACTIVE', autoDmSent ? 'SENT' : 'FAILED']);
+const dbAction = action === 'MUTE' ? 'TIMEOUT' : action; // Estandarizamos 'MUTE' a 'TIMEOUT'
+                
+                await db.query(`INSERT INTO modlogs (caseid, guildid, action, userid, usertag, moderatorid, moderatortag, reason, timestamp, "endsat", action_duration, status, dmstatus) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [autoCaseId, guildId, dbAction, targetUser.id, targetUser.tag, interaction.client.user.id, interaction.client.user.tag, autoReason, Date.now(), endsAt, durationStr, 'ACTIVE', autoDmSent ? 'SENT' : 'FAILED']);
                 
                 if (endsAt) resumePunishmentsOnStart(interaction.client);
                 
