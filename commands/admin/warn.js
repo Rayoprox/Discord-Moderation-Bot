@@ -3,7 +3,7 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 
-const APPEAL_SERVER_INVITE = 'https://discord.gg/256k5quuQy'; 
+const APPEAL_SERVER_INVITE = process.env.DISCORD_APPEAL_INVITE_LINK;
 const WARN_COLOR = 0xFFD700;
 const SUCCESS_COLOR = 0x2ECC71;
 const AUTOMOD_COLOR = 0xAA0000;
