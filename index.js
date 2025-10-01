@@ -1,19 +1,15 @@
-console.log(`--- BOT STARTING UP at ${new Date().toISOString()} ---`); // <--- FUNCIÓN DE DIAGNÓSTICO AÑADIDA
+// --- MOVIDO AQUÍ: ESTA LÍNEA DEBE SER LA PRIMERA ---
+require('dotenv').config();
+// --------------------------------------------------
+
+console.log(`--- BOT STARTING UP at ${new Date().toISOString()} ---`);
 
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const db = require('./utils/db.js'); // Assuming db.js is in the utils folder
-
-// NO MÁS CLASE: Importamos las funciones directamente (necesario si las usas en algún otro lugar de index.js)
-// Ya no es necesario importar aquí si solo se usan en ready.js, pero lo mantendremos por seguridad estructural.
+const db = require('./utils/db.js'); // Ahora db se carga DESPUÉS de dotenv
 const { startScheduler, resumePunishmentsOnStart } = require('./utils/temporary_punishment_handler.js'); 
-
-// RENDER 24/7 HEARTBEAT REQUIREMENT
 const http = require('http');
-
-// Load environment variables (Make sure you upload all these to Render secrets)
-require('dotenv').config();
 
 const client = new Client({ 
     intents: [
@@ -57,7 +53,6 @@ for (const file of eventFiles) {
     if (event.once) {
         client.once(event.name, (...args) => event.execute(...args));
     } else {
-        // Para interactionCreate (y otros eventos), solo pasamos los argumentos estándar.
         client.on(event.name, (...args) => event.execute(...args)); 
     }
 }
@@ -68,18 +63,12 @@ for (const file of eventFiles) {
         await db.ensureTables();
         console.log('✅ All tables ensured in PostgreSQL.');
         
-        // Login Discord bot after database is ready
         client.login(process.env.DISCORD_TOKEN);
 
     } catch (error) {
         console.error('❌ Failed to connect to database or login to Discord:', error);
     }
 })();
-
-
-// --- ELIMINADO: INITIALIZE TEMPORARY PUNISHMENT HANDLER ---
-// La lógica de client.once('ready', ...) ha sido movida a events/ready.js
-
 
 // --- RENDER 24/7 HEARTBEAT SERVER ---
 const PORT = process.env.PORT || 3000; 
