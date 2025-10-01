@@ -3,6 +3,7 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 
+const APPEAL_SERVER_INVITE = 'https://discord.gg/256k5quuQy'; // Añadido para la función de apelar
 const WARN_COLOR = 0xFFD700;
 const SUCCESS_COLOR = 0x2ECC71;
 const AUTOMOD_COLOR = 0xAA0000;
@@ -90,10 +91,35 @@ module.exports = {
             let autoDmSent = false;
 
             try {
-                const dmPunishmentEmbed = new EmbedBuilder().setColor(AUTOMOD_COLOR).setTitle(`🚨 Automated Action: ${action}`).setDescription(`Due to accumulating **${activeWarningsCount} active warnings**, an automated punishment has been applied in **${interaction.guild.name}**.`).addFields({ name: '🔨 Action', value: action, inline: true }, { name: '⏳ Duration', value: durationStr || (action === 'KICK' ? 'Instant' : 'Permanent'), inline: true }).setFooter({ text: `Case ID: ${autoCaseId}` });
-                await targetUser.send({ embeds: [dmPunishmentEmbed] });
-                autoDmSent = true;
-            } catch (e) { console.warn(`[AUTOMOD] Could not send punishment DM to ${targetUser.tag}.`); }
+                if (action === 'BAN' || action === 'TIMEOUT') {
+                    const dmPunishmentEmbed = new EmbedBuilder()
+                        .setColor(AUTOMOD_COLOR)
+                        .setTitle(`🚨 Automated Action from ${interaction.guild.name}`)
+                        .setDescription(`We regret to inform you that due to accumulating **${activeWarningsCount} active warnings**, an automated punishment has been applied to you.`)
+                        .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
+                        .addFields(
+                            { name: '🤖 Moderator', value: `${interaction.client.user.tag} (Automod)`, inline: true },
+                            { name: '⏳ Duration', value: durationStr || (action === 'BAN' ? 'Permanent' : 'Timed'), inline: true },
+                            { name: '🔨 Action', value: action, inline: true},
+                            { name: '📝 Reason', value: `\`\`\`\n${autoReason}\n\`\`\``, inline: false }
+                        );
+
+                    if (action === 'BAN') {
+                        dmPunishmentEmbed.setFooter({ text: `Case ID: ${autoCaseId} | You will need this if you decide to appeal!` });
+                        dmPunishmentEmbed.addFields({
+                            name: '🗣️ How to Appeal',
+                            value: `If you believe this was an error, you can submit an appeal by joining our appeals server: \n[**Click here to appeal**](${APPEAL_SERVER_INVITE})`
+                        });
+                    } else {
+                        dmPunishmentEmbed.setFooter({ text: `Case ID: ${autoCaseId}` });
+                    }
+                    
+                    await targetUser.send({ embeds: [dmPunishmentEmbed] });
+                    autoDmSent = true;
+                }
+            } catch (e) { 
+                console.warn(`[AUTOMOD] Could not send punishment DM to ${targetUser.tag}.`); 
+            }
 
             try {
                 if ((action === 'MUTE' || action === 'TIMEOUT' || action === 'BAN') && durationStr) {
