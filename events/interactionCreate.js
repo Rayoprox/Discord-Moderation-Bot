@@ -70,20 +70,42 @@ module.exports = {
             const deferred = await safeDefer(interaction, false, !isPublic);
             if (!deferred) return;
 
+            // --- BLOQUE DE PERMISOS CORREGIDO ---
             try {
-                const allowedRolesResult = await db.query('SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = $2', [interaction.guild.id, command.data.name]);
-                const allowedRoles = allowedRolesResult.rows.map(r => r.role_id);
+                // 1. Los administradores siempre tienen acceso a todo.
                 if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                    
+                    // 2. Obtenemos los roles configurados en /setup para este comando.
+                    const allowedRolesResult = await db.query('SELECT role_id FROM command_permissions WHERE guildid = $1 AND command_name = $2', [interaction.guild.id, command.data.name]);
+                    const allowedRoles = allowedRolesResult.rows.map(r => r.role_id);
+                    
                     let isAllowed = false;
-                    if (allowedRoles.length > 0) { isAllowed = interaction.member.roles.cache.some(role => allowedRoles.includes(role.id)); } 
-                    else if (command.data.default_member_permissions) { isAllowed = interaction.member.permissions.has(command.data.default_member_permissions); } 
-                    else { isAllowed = true; }
-                    if (!isAllowed) { return interaction.editReply({ content: 'You do not have the required permissions for this command.' }); }
+
+                    // 3. Comprobamos si se ha configurado algún rol personalizado.
+                    if (allowedRoles.length > 0) {
+                        // Si hay roles en /setup, la única forma de pasar es teniendo uno de ellos.
+                        // Los permisos de Discord por defecto se ignoran.
+                        isAllowed = interaction.member.roles.cache.some(role => allowedRoles.includes(role.id));
+                    } else {
+                        // 4. Si NO hay roles en /setup, usamos el sistema de permisos por defecto de Discord.
+                        if (command.data.default_member_permissions) {
+                            isAllowed = interaction.member.permissions.has(command.data.default_member_permissions);
+                        } else {
+                            // Si el comando no tiene permisos por defecto, se permite.
+                            isAllowed = true;
+                        }
+                    }
+
+                    // 5. Si después de todas las comprobaciones no está permitido, se deniega el acceso.
+                    if (!isAllowed) {
+                        return interaction.editReply({ content: 'You do not have the required permissions for this command.' });
+                    }
                 }
             } catch (dbError) {
                 console.error('[ERROR] Database query for permissions failed:', dbError);
                 return interaction.editReply({ content: 'A database error occurred while checking permissions.' });
             }
+            // --- FIN DEL BLOQUE CORREGIDO ---
             
             try {
                 await command.execute(interaction); 
@@ -103,6 +125,7 @@ module.exports = {
             return; 
         }
 
+        // --- EL RESTO DEL CÓDIGO PERMANECE IGUAL ---
         if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu() || interaction.isModalSubmit()) {
             const { customId, values } = interaction;
             const parts = customId.split('_');
