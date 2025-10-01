@@ -8,7 +8,7 @@ module.exports = {
     isPublic: true,
     data: new SlashCommandBuilder()
         .setName('void')
-        .setDescription("Annuls (marks as void) a finished moderation case.")
+        .setDescription("Annuls (marks as void) a finished or non-timed moderation case.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
         .addStringOption(option => option.setName('case_id').setDescription('The Case ID of the log to void (e.g., CASE-123456789).').setRequired(true))
         .addStringOption(option => option.setName('reason').setDescription('The reason for voiding this case.').setRequired(true)),
@@ -25,15 +25,15 @@ module.exports = {
             return interaction.editReply({ content: `❌ Case ID \`${caseId}\` not found in the logs.`, flags: [MessageFlags.Ephemeral] });
         }
         
-        // --- LÓGICA DE ESTADO CORREGIDA ---
-        if (log.status === 'ACTIVE') {
-            return interaction.editReply({ content: `❌ This case is still **ACTIVE**. Please remove the punishment (unban/unmute) before you can void this case.`, flags: [MessageFlags.Ephemeral] });
+        // --- LÓGICA DE ESTADO CORREGIDA Y MEJORADA ---
+        // Ahora solo bloquea si el caso ACTIVO es un TIMEOUT o un BAN.
+        if (log.status === 'ACTIVE' && (log.action === 'TIMEOUT' || log.action === 'BAN')) {
+            return interaction.editReply({ content: `❌ This case is still an **ACTIVE** punishment. Please remove the punishment (unban/unmute) before you can void this case.`, flags: [MessageFlags.Ephemeral] });
         }
 
         if (log.status === 'VOIDED' || log.status === 'REMOVED') {
             return interaction.editReply({ content: `❌ Case ID \`${caseId}\` is already marked as **${log.status}** and cannot be voided again.`, flags: [MessageFlags.Ephemeral] });
         }
-        // Si el estado es 'EXPIRED' o 'PERMANENT', el código ahora continuará.
         // --- FIN DE LA CORRECCIÓN ---
 
         const newReason = `[VOIDED by ${interaction.user.tag}: ${voidReason}] - Original Reason: ${log.reason}`;

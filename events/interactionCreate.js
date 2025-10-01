@@ -347,24 +347,27 @@ module.exports = {
                     });
                 }
                 
-                   if (action === 'purge-confirm') {
+                  if (action === 'purge-confirm') {
                     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
                     await interaction.deferUpdate();
 
-                    // --- NUEVA COMPROBACIÓN DE SEGURIDAD ---
-                    const activeLogsResult = await db.query("SELECT caseid FROM modlogs WHERE userid = $1 AND guildid = $2 AND status = 'ACTIVE'", [userId, guildId]);
+                    // --- COMPROBACIÓN DE SEGURIDAD MODIFICADA ---
+                    const activePunishmentsResult = await db.query(
+                        "SELECT caseid, action FROM modlogs WHERE userid = $1 AND guildid = $2 AND status = 'ACTIVE' AND (action = 'TIMEOUT' OR action = 'BAN')",
+                        [userId, interaction.guild.id]
+                    );
 
-                    if (activeLogsResult.rows.length > 0) {
-                        const activeCaseId = activeLogsResult.rows[0].caseid;
+                    if (activePunishmentsResult.rows.length > 0) {
+                        const activeCase = activePunishmentsResult.rows[0];
                         return interaction.editReply({ 
-                            content: `❌ You cannot purge logs for this user as they have at least one **ACTIVE** punishment (e.g., Case ID: \`${activeCaseId}\`). Please remove all active punishments before purging their logs.`,
+                            content: `❌ You cannot purge logs for this user as they have an active **${activeCase.action}** (Case ID: \`${activeCase.caseid}\`). Please remove all active punishments with timers before purging their logs.`,
                             components: [] 
                         });
                     }
-                    // --- FIN DE LA COMPROBACIÓN ---
+                    // --- FIN DE LA MODIFICACIÓN ---
 
                     const targetUser = await interaction.client.users.fetch(userId);
-                    await db.query("DELETE FROM modlogs WHERE userid = $1 AND guildid = $2", [userId, guildId]);
+                    await db.query("DELETE FROM modlogs WHERE userid = $1 AND guildid = $2", [userId, interaction.guild.id]);
                     
                     await interaction.editReply({ content: `✅ All **${targetUser.tag}** modlogs have been **PERMANENTLY DELETED**.`, components: [] });
                     
@@ -373,7 +376,6 @@ module.exports = {
                     
                     return;
                 }
-                // --- FIN DEL BLOQUE MODIFICADO ---
                 
                 if (action === 'purge-cancel') return interaction.update({ content: 'Purge cancelled.', components: [] });
             }
@@ -388,7 +390,7 @@ module.exports = {
                 return interaction.editReply({ content: 'Please select an active warning to **annul** (mark as removed):', components: [new ActionRowBuilder().addComponents(menu)] });
             }
 
-          if (customId.startsWith('warns_remove-select_')) {
+           if (customId.startsWith('warns_remove-select_')) {
                 await interaction.deferUpdate();
                 const caseIdToRemove = values[0];
                 let editSuccess = false;
@@ -410,14 +412,12 @@ module.exports = {
 
                                 if (message && message.embeds.length > 0) {
                                     const originalEmbed = message.embeds[0];
-                                    const originalDescription = originalEmbed.description || '';
                                     
-                                    // --- LÓGICA MODIFICADA ---
+                                    // --- LÓGICA MODIFICADA (SIN TACHADO) ---
                                     const newEmbed = EmbedBuilder.from(originalEmbed)
-                                        .setDescription(`~~${originalDescription}~~`) // <-- LÍNEA MODIFICADA PARA TACHAR
-                                        .setColor(0x95A5A6)
+                                        .setColor(0x95A5A6) // Color gris para estado anulado
                                         .setTitle(`⚠️ Case Annulled: ${log.action.toUpperCase()}`)
-                                        .setFooter({ text: `Case ID: ${caseIdToRemove} | Status: REMOVED` });
+                                        .setFooter({ text: `Case ID: ${caseIdToRemove} | Status: REMOVED by ${interaction.user.tag}` });
                                     // --- FIN DE LA MODIFICACIÓN ---
                                     
                                     await message.edit({ embeds: [newEmbed] });
