@@ -329,10 +329,22 @@ module.exports = {
                     return;
                 }
 
+               // --- BLOQUE MODIFICADO ---
                 if (action === 'purge-prompt') {
                     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return interaction.reply({ content: '❌ You need Administrator permissions.', flags: [MessageFlags.Ephemeral] });
-                    const confirmationButtons = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`modlogs_purge-confirm_${userId}_${authorId}`).setLabel('Yes, Delete PERMANENTLY').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`modlogs_purge-cancel_${userId}_${authorId}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary));
-                    return interaction.reply({ content: `⚠️ **PERMANENT DELETE WARNING:** Are you sure you want to delete **ALL** moderation logs for <@${userId}>? This cannot be undone.`, components: [confirmationButtons], flags: [MessageFlags.Ephemeral] });
+                   
+                    await interaction.deferReply({ ephemeral: true });
+
+                    const confirmationButtons = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`modlogs_purge-confirm_${userId}_${authorId}`).setLabel('Yes, Delete PERMANENTLY').setStyle(ButtonStyle.Danger), 
+                        new ButtonBuilder().setCustomId(`modlogs_purge-cancel_${userId}_${authorId}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+                    );
+
+                    
+                    return interaction.editReply({ 
+                        content: `⚠️ **PERMANENT DELETE WARNING:** Are you sure you want to delete **ALL** moderation logs for <@${userId}>? This cannot be undone.`, 
+                        components: [confirmationButtons] 
+                    });
                 }
                 
                 if (action === 'purge-confirm') {
