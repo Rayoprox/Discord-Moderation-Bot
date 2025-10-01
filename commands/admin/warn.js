@@ -3,7 +3,7 @@ const db = require('../../utils/db.js');
 const ms = require('ms');
 const { resumePunishmentsOnStart } = require('../../utils/temporary_punishment_handler.js');
 
-const APPEAL_SERVER_INVITE = 'https://discord.gg/256k5quuQy'; // Añadido para la función de apelar
+const APPEAL_SERVER_INVITE = 'https://discord.gg/256k5quuQy'; 
 const WARN_COLOR = 0xFFD700;
 const SUCCESS_COLOR = 0x2ECC71;
 const AUTOMOD_COLOR = 0xAA0000;
@@ -105,11 +105,11 @@ module.exports = {
                         );
 
                     if (action === 'BAN') {
-                        dmPunishmentEmbed.setFooter({ text: `Case ID: ${autoCaseId} | You will need this if you decide to appeal!` });
-                        dmPunishmentEmbed.addFields({
-                            name: '🗣️ How to Appeal',
-                            value: `If you believe this was an error, you can submit an appeal by joining our appeals server: \n[**Click here to appeal**](${APPEAL_SERVER_INVITE})`
-                        });
+        dmPunishmentEmbed.setFooter({ text: `Case ID: ${autoCaseId} | You will need this if you decide to appeal!` });
+        dmPunishmentEmbed.addFields({
+            name: '🗣️ How to Appeal',
+            value: `If you believe this was an error, you can submit an appeal by joining our appeals server: \n[**Click here to appeal**](${APPEAL_SERVER_INVITE})`
+        });
                     } else {
                         dmPunishmentEmbed.setFooter({ text: `Case ID: ${autoCaseId}` });
                     }
