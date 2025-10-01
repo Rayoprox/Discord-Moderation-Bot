@@ -347,16 +347,34 @@ module.exports = {
                     });
                 }
                 
-                if (action === 'purge-confirm') {
+                   if (action === 'purge-confirm') {
                     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
                     await interaction.deferUpdate();
+
+                    // --- NUEVA COMPROBACIÓN DE SEGURIDAD ---
+                    const activeLogsResult = await db.query("SELECT caseid FROM modlogs WHERE userid = $1 AND guildid = $2 AND status = 'ACTIVE'", [userId, guildId]);
+
+                    if (activeLogsResult.rows.length > 0) {
+                        const activeCaseId = activeLogsResult.rows[0].caseid;
+                        return interaction.editReply({ 
+                            content: `❌ You cannot purge logs for this user as they have at least one **ACTIVE** punishment (e.g., Case ID: \`${activeCaseId}\`). Please remove all active punishments before purging their logs.`,
+                            components: [] 
+                        });
+                    }
+                    // --- FIN DE LA COMPROBACIÓN ---
+
                     const targetUser = await interaction.client.users.fetch(userId);
                     await db.query("DELETE FROM modlogs WHERE userid = $1 AND guildid = $2", [userId, guildId]);
+                    
                     await interaction.editReply({ content: `✅ All **${targetUser.tag}** modlogs have been **PERMANENTLY DELETED**.`, components: [] });
+                    
                     const purgedEmbed = new EmbedBuilder().setTitle('Logs Purged').setDescription(`The logs for this user were purged by <@${interaction.user.id}>.`).setColor(0xAA0000);
                     await interaction.message.edit({ embeds: [purgedEmbed], components: [] }).catch(() => {});
+                    
                     return;
                 }
+                // --- FIN DEL BLOQUE MODIFICADO ---
+                
                 if (action === 'purge-cancel') return interaction.update({ content: 'Purge cancelled.', components: [] });
             }
             
